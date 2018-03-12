@@ -5,12 +5,10 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:Pinger"
         mc:Ignorable="d"
-        Title="Window2" Height="410.084" Width="412.605">
+        Title="Log" Height="391.705" Width="489.568" WindowStyle="None" ShowInTaskbar="False">
     <Grid>
-        <Viewbox StretchDirection="Both" Margin="0,0,10,10">
 
-            <TextBox x:Name="LogBox2" HorizontalAlignment="Left" Height="191" Margin="10,10,0,0" TextWrapping="Wrap" VerticalAlignment="Top" Width="206" TextChanged="TextBox_TextChanged"/>
-
-        </Viewbox>
+        <TextBox x:Name="LogBox2" FontSize="8" HorizontalAlignment="Left" Height="359" Margin="10,10,0,0" TextWrapping="Wrap" VerticalAlignment="Top" Width="385" ScrollViewer.VerticalScrollBarVisibility="Auto" TextChanged="TextBox_TextChanged"/>
+        <Button Content="Hide" HorizontalAlignment="Left" Margin="400,10,0,0" VerticalAlignment="Top" Width="57" Height="20" Click="Button_Click"/>
     </Grid>
 </Window>

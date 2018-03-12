@@ -18,103 +18,391 @@ using System.Windows.Navigation;
 using System.Windows.Shapes;
 using System.Windows.Threading;
 
+
 namespace Pinger
 {
-    
-
-    /// <summary>
-    /// Interaction logic for MainWindow.xaml
-    /// </summary>
     public partial class MainWindow : Window
     {
         Window2 window2 = new Window2();
-
-        public class PINGREPL
-        {
-            public PINGREPL(IPStatus Status, int Ttl, long Rtt, int Bitesize, int Seq)
-            {
-                Status = IPStatus.Unknown;
-                Ttl = 0;
-                Rtt = 0;
-                Bitesize = 0;
-                Seq = 0;
-
-            }
-            public IPStatus Status { get; set; }
-            public int Ttl { get; set; }
-            public long Rtt { get; set; }
-            public int Bitesize { get; set; }
-            public int Seq { get; set; }
-
-        }
 
         public MainWindow()
         {
             InitializeComponent();
         }
 
-        private delegate void ThreadDelegate();
+
 
         // ============================================================================================== Main Button Trigger
         // ============================================================================================== 
         // ============================================================================================== 
-        private void Button_Click(object sender, RoutedEventArgs e)
-        {
-            window2.LogBox2.AppendText("\n======="+ Convert.ToString(DateTime.Now)+ "=======\n");
-            cancelled = false;
-            storenumber = "";
-            progressbar.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(new Action(() => UpdateProgressbar(0))));
-            PingButton.IsEnabled = false;
-            CancelButton.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(EnableCancelButton));
-            pingcomplete = false;
-            box4 = box3;
-            box3 = box2;
-            box2 = box1;
-            currentoperationindex++;
-            Outputfield.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(clearoutbox));
-            StatisticsBox.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(UpdateBox0));
-            //StatisticsBox_Copy.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(UpdateBox1));
-            //StatisticsBox_Copy1.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(UpdateBox2));
-            //StatisticsBox_Copy2.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(UpdateBox3));
-            ThreadDelegate parser = new ThreadDelegate(ParseInput);
-            parser.BeginInvoke(null, null);
-        }
-        // ============================================================================================== /Main Button Trigger
-        // ==============================================================================================
-        // ==============================================================================================
-        // ======================================= Variable Declarations
+
+        IPStatus status = IPStatus.Unknown;
+        int ttl = 0;
+        long rtt = 0;
+        int bitesize = 0;
+        int seq = 0;
+
+        private delegate void ThreadDelegate();
         IPAddress addr = IPAddress.Parse("127.0.0.1");
         IPHostEntry hostEntry;
         string devicetype = "dg";
         bool pingcomplete;
         bool singlecomplete = false;
-        public bool cancelled = false;
+        public bool cancelrequested = false;
         string rateslidervalue = "1";
         long roundtriptime;
-        int ttl;
-        double rateping = 1;
+        int rateping = 1;
         int pingtimes;
         int lastseq = 0;
-        int currentseq = 0;
+        int senttotal = 0;
         string addressinputvar;
         string box1 = "";
-        string box2 = "";
-        string box3 = "";
-        string box4 = "";
         byte[] icmpdata = new byte[1];
         int currentoperationindex = 0;
+        int ri1rttmax;
+        int ri1rttmin;
+        double ri1rttaverage;
+        int receivedtotal;
+        int losttotal;
+        string storenumber;
+        int pingindex = 0;
+        bool isValidIp;
+        List<int> rtts = new List<int>();
+        int resttime = 1000;
+        string outs = "";
+        int val = 10;
+        Ping pingSender = new Ping();
         
-        //public string data = new String('a', 5);
-        //System.Byte[] icmpdata = Encoding.ASCII.GetBytes(data);
+        bool meswarn = false;
 
-        PINGREPL replyvalues = new PINGREPL(IPStatus.Unknown, 0, 0, 0, 0);
+        private void Button_Click(object sender, RoutedEventArgs e)
+        {
+            PingButton.IsEnabled = false;
+            pingcomplete = false;
+            lastseq = 0;
+            cancelrequested = false;
+            storenumber = "";
+            window2.LogBox2.AppendText("\n=======" + Convert.ToString(DateTime.Now) + "=======\n");
+            progressbar.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(new Action(() => UpdateProgressbar(0))));
+            CancelButton.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(EnableCancelButton));
+            Outputfield.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(clearoutbox));
+            StatisticsBox.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(UpdateBox0));
+            ParseInput();
+            ThreadDelegate pinger = new ThreadDelegate(Repeaticmp);
+            pinger.BeginInvoke(null, null);
+            //ThreadDelegate parser = new ThreadDelegate(ParseInput);
+            //parser.BeginInvoke(null, null);
+
+        }
+
+
+        private void Repeaticmp()
+        {
+            progressbar.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(new Action(() => UpdateProgressbar(10))));
+            receivedtotal = 0;
+            senttotal = 0;
+            losttotal = 0;
+            for (int i = 1; i <= pingtimes; i++)
+            {
+                singlecomplete = false;
+                AnimateprogressbarAsync();
+                Task taskA = Task.Factory.StartNew(() => Sendicmp(addr));
+                taskA.Wait();
+                singlecomplete = true;
+                try
+                {
+                    ri1rttmax = rtts.Max();
+                    ri1rttmin = rtts.Min();
+                    ri1rttaverage = Convert.ToInt16(rtts.Average());
+                }
+                catch (Exception e)
+                {
+                    MessageBox.Show(Convert.ToString(e));
+                    MessageBox.Show("Failed to accurately calculate averages for statistics, probably because no replies were received.");
+                    ri1rttaverage = 0;
+                    ri1rttmax = 0;
+                    ri1rttmin = 0;
+                    continue;
+                }
+                if (rateping < 24)
+                {
+                    if (i != pingtimes)
+                    {
+                        Task taskB = Task.Factory.StartNew(() => UpdateUserInterface(bitesize, ttl));
+                        taskB.Wait();
+                    }
+                }
+                else
+                {
+                    if (i % (rateping/24) == 0)
+                    {
+                        if (i != pingtimes)
+                        {
+                            Task taskD = Task.Factory.StartNew(() => UpdateUserInterface(bitesize, ttl));
+                            taskD.Wait();
+                        }
+                    }
+                }
+                    if (i < pingtimes)
+                    {
+                        Thread.Sleep(resttime);
+                    }
+                if (cancelrequested == true)
+                {
+                    break;
+                }
+
+            }
+            Task taskE = Task.Factory.StartNew(() => UpdateUserInterface(bitesize, ttl));
+            taskE.Wait();
+            progressbar.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(new Action(() => UpdateProgressbar(0))));
+            pingcomplete = true;
+            window2.LogBox2.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(new Action(() => UpdateLogBox("\n" + box1 + "\n"))));
+            window2.LogBox2.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(window2.LogBox2.ScrollToEnd));
+            Outputfield.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(UpdateUserInterfacePingComplete));
+            window2.LogBox2.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(new Action(() => UpdateLogBox("Ping complete\n"))));
+            CancelButton.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(DisableCancelButton));
+            PingButton.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(EnablePingButton));
+        }
+
+
+
+        private void Sendicmp(IPAddress addresstoping)
+        {
+            
+            status = IPStatus.Unknown;
+            rtt = 0;
+            bitesize = 0;
+            ttl = 0;
+            seq = 0;
+            PingReply reply = null;
+            
+            try
+            {
+                Task updatetask = Task.Factory.StartNew(() => reply = pingSender.Send(addresstoping, 5000, icmpdata));
+                updatetask.Wait();
+                senttotal++;
+            }
+            catch (PingException e)
+            {
+                MessageBox.Show("Exception thrown while sending ping " + Convert.ToString(e));
+                status = IPStatus.Unknown;
+                return;
+            }
+            status = reply.Status;
+            rtt = reply.RoundtripTime;
+            bitesize = reply.Buffer.Length;
+            rtts.Add(Convert.ToInt16(reply.RoundtripTime));
+            try
+            {
+                ttl = (reply.Options.Ttl);
+            }
+            catch (NullReferenceException e)
+            {
+                //MessageBox.Show("Null ref exception while setting ttl " + Convert.ToString(e));
+                ttl = 0;
+            }
+            if (status == IPStatus.Success)
+            {
+                receivedtotal++;
+            }
+            else
+            {
+                losttotal++;
+                return;
+            }
+            //MessageBox.Show("Status after ping " + Convert.ToString(status));
+            return;
+        }
+        
+
+        //.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(new Action(() => )));
+        private void UpdateUserInterface(int bitesize, int ttl)
+        {
+            Outputfield.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(Outputfield.ScrollToEnd));
+            //MessageBox.Show("status in update is " + Convert.ToString(status));
+            if (cancelrequested == true)
+            {
+                return;
+            }
+            if (status == IPStatus.Success)
+            {
+                Outputfield.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(new Action(() => Outputfield.AppendText(senttotal + " Reply from " + addr + ": bytes=" + bitesize + " time=" +
+            rtt + "ms TTL=" + ttl + "\n"))));
+                window2.LogBox2.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(new Action(() => window2.LogBox2.AppendText(senttotal + " Reply from " + addr + ": bytes=" + bitesize + " time=" +
+            rtt + "ms TTL=" + ttl + "\n"))));
+            if (storenumber == "")
+                {
+                    StatisticsBox.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(new Action(() => box1 = StatisticsBox.Text = "Ping statistics for " + addr + ":\n    Packets: Sent = " + senttotal + ", Received = " + receivedtotal +
+                                         ", Lost = " + losttotal + "(" + (Convert.ToInt16(((Convert.ToDouble(losttotal) / (Convert.ToDouble(senttotal)) * 100.0)))) + "% loss),\n"
+                                         + "Approximate rount trip times in milli-seconds:\n"
+                                         + "    Minimum = " + ri1rttmin + "ms, Maximum = " + ri1rttmax + "ms, Average = " + ri1rttaverage + "ms\n")));
+
+                    window2.LogBox2.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(window2.LogBox2.ScrollToEnd));
+            }
+            if (storenumber != "")
+                {
+                    StatisticsBox.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(new Action(() => box1 = StatisticsBox.Text = "Ping statistics for " + addr + "(" + storenumber + "):\n    Packets: Sent = " + senttotal + ", Received = " + receivedtotal +
+                                         ", Lost = " + losttotal + "(" + (Convert.ToInt16(((Convert.ToDouble(losttotal) / (Convert.ToDouble(senttotal)) * 100.0)))) + "% loss),\n"
+                                         + "Approximate rount trip times in milli-seconds:\n"
+                                         + "    Minimum = " + ri1rttmin + "ms, Maximum = " + ri1rttmax + "ms, Average = " + ri1rttaverage + "ms\n")));
+                    window2.LogBox2.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(window2.LogBox2.ScrollToEnd));
+                }
+            }
+            else
+            {
+                switch (status)
+                {
+                    case IPStatus.TimedOut:
+                        outs = (senttotal + " Request timed out.\n");
+                        break;
+                    case IPStatus.BadDestination:
+                        outs = (senttotal + " Bad destination\n");
+                        break;
+                    case IPStatus.DestinationHostUnreachable:
+                        outs = (senttotal + " Destination host unreachable.\n");
+                        break;
+                    case IPStatus.DestinationNetworkUnreachable:
+                        outs = (senttotal + " Destination network unreachable.\n");
+                        break;
+                    case IPStatus.DestinationUnreachable:
+                        outs = (senttotal + " Destination unreachable.\n");
+                        break;
+                    case IPStatus.HardwareError:
+                        outs = (senttotal + " Hardware failure.\n");
+                        break;
+                    case IPStatus.NoResources:
+                        outs = (senttotal + " Insufficient resources to complete request.\n");
+                        break;
+                    case IPStatus.PacketTooBig:
+                        outs = (senttotal + " Packet sent was too big.\n");
+                        break;
+                    case IPStatus.ParameterProblem:
+                        outs = (senttotal + " Parameters are invalid.\n");
+                        break;
+                    case IPStatus.SourceQuench:
+                        outs = (senttotal + " Reported source quench.\n");
+                        break;
+                    case IPStatus.TimeExceeded:
+                        outs = (senttotal + " TTL expired in transit.\n");
+                        break;
+                    case IPStatus.TtlExpired:
+                        outs = (senttotal + " TTL expired in transit.\n");
+                        break;
+                    case IPStatus.TtlReassemblyTimeExceeded:
+                        outs = (senttotal + " TTL expired in transit.\n");
+                        break;
+                    case IPStatus.Unknown:
+                        outs = (senttotal + " Unknown Failure.\n");
+                        break;
+                    case IPStatus.UnrecognizedNextHeader:
+                        outs = (senttotal + " Unrecognized next header.\n");
+                        break;
+                }
+                Outputfield.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(new Action(() => Outputfield.AppendText(outs))));
+                window2.LogBox2.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(new Action(() => window2.LogBox2.AppendText(outs))));
+                window2.LogBox2.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(window2.LogBox2.ScrollToEnd));
+            }
+        }
+
+
+
+
+        
+        private async Task AnimateprogressbarAsync()
+        {
+            val = 10;
+            while (val < 100)
+            {
+                if (singlecomplete == true)
+                {
+                    progressbar.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(new Action(() => UpdateProgressbar(0))));
+                    return;
+                }
+                if (cancelrequested == false)
+                {
+                        progressbar.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(new Action(() => UpdateProgressbar(val))));
+                        await Task.Delay(TimeSpan.FromSeconds(0.112));
+                        val = val + 2;
+                }
+                else
+                {
+                    return;
+                }
+            }
+        }
+
+
+
+
+
+
+
+
+
+
+        //        ==============================
+        //        ==============================
+        //        ==============================
+        //        ==============================
+        //        ==============================
+        //        ==============================
+        //        ==============================
+        //        ==============================
+        //        ==============================
+        //===============================Functions that are under control======================
+        //        ==============================
+        //        ==============================
+        //        ==============================
+        //        ==============================
+        //        ==============================
+        //        ==============================
+        //        ==============================
+        //        ==============================
+
+
+
+
+
+        private void ParseInput()
+        {
+            Outputfield.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(ResolvingHostUpdate));
+            progressbar.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(new Action(() => UpdateProgressbar(25))));
+            isValidIp = IPAddress.TryParse(addressinputvar, out addr);
+            if (addressinputvar != Convert.ToString(addr))
+            {
+                storenumber = addressinputvar.PadLeft(5, '0');
+                storenumber = devicetype + storenumber;
+                try
+                {
+                    hostEntry = Dns.GetHostEntry(storenumber);
+                }
+                catch (System.Net.Sockets.SocketException)
+                {
+                    cancelrequested = true;
+                    CancelButton.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(DisableCancelButton));
+                    PingButton.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(EnablePingButton));
+                    Outputfield.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(UpdateOutputFailed));
+                    Outputfield.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(UpdateUserInterfacePingComplete));
+                    progressbar.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(new Action(() => UpdateProgressbar(0))));
+                    return;
+                }
+                addr = hostEntry.AddressList[0];
+                progressbar.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(new Action(() => UpdateProgressbar(50))));
+            }
+            else
+            {
+                addr = IPAddress.Parse(addressinputvar);
+            }
+            progressbar.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(new Action(() => UpdateProgressbar(0))));
+            Outputfield.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(clearoutbox));
+        }
+
 
         private void Address_TextChanged(object sender, TextChangedEventArgs e)
         {
             addressinputvar = addressin.Text;
         }
-
-
 
 
         private void Number_TextChanged(object sender, TextChangedEventArgs e)
@@ -127,18 +415,13 @@ namespace Pinger
             {
                 numberofpings.Text = "1";
             }
-            pingtimes = Convert.ToInt16(numberofpings.Text);
-            if (pingtimes > 500)
+            pingtimes = Convert.ToInt32(numberofpings.Text);
+            if (pingtimes > 50000)
             {
-                pingtimes = 500;
-                numberofpings.Text = "500";
+                pingtimes = 50000;
+                numberofpings.Text = "50000";
             }
         }
-
-
-
-
-
 
 
         private void UpdateOutputFailed()
@@ -147,15 +430,10 @@ namespace Pinger
         }
 
 
-
-
-
         private void UpdateAddressSubstring()
         {
             addressin.Text = addressin.Text.Substring(0, 5);
         }
-
-
 
 
         private void ResolvingHostUpdate()
@@ -164,124 +442,7 @@ namespace Pinger
         }
 
 
-        int ri1rttmax;
-        int ri1rttmin;
-        double ri1rttaverage;
-        int receivedtotal;
-        int senttotal;
-        int losttotal;
-        string storenumber;
-        int pingindex = 0;
 
-        private void ParseInput()
-        {
-            lastseq = 0;
-            Outputfield.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(ResolvingHostUpdate));
-            ThreadDelegate progressbarthread = new ThreadDelegate(Animateprogressbar);
-            progressbarthread.BeginInvoke(null, null);
-            bool isValidIp = IPAddress.TryParse(addressinputvar, out addr);
-            if (addressinputvar != Convert.ToString(addr))
-            {
-                storenumber = addressinputvar.PadLeft(5, '0');
-                storenumber = devicetype + storenumber;
-                try
-                {
-                    hostEntry = Dns.GetHostEntry(storenumber);
-                }
-                catch (System.Net.Sockets.SocketException)
-                {
-                    Outputfield.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(UpdateOutputFailed));
-                    cancelled = true;
-                    CancelButton.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(DisableCancelButton));
-                    PingButton.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(EnablePingButton));
-                    Outputfield.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(UpdateUserInterfacePingComplete));
-                    progressbar.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(new Action(() => UpdateProgressbar(0))));
-                    return;
-
-                }
-                addr = hostEntry.AddressList[0];
-            }
-            else
-            {
-                addr = IPAddress.Parse(addressinputvar);
-            }
-            progressbar.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(new Action(() => UpdateProgressbar(0))));
-            Outputfield.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(clearoutbox));
-            pingindex++;
-            ThreadDelegate pinger = new ThreadDelegate(Repeaticmp);
-            pinger.BeginInvoke(null, null);
-        }
-
-
-        private void clearoutbox()
-        {
-            Outputfield.Text = "";
-        }
-
-        private void Repeaticmp()
-        {
-            int thisinstance = pingindex;
-            List<int> rtts = new List<int>();
-            receivedtotal = 0;
-            receivedtotal = 0;
-            senttotal = 0;
-            losttotal = 0;
-            
-            for (int i = 1; i <= pingtimes; i++)
-            {
-                if (thisinstance != pingindex)
-                {
-                    return;
-                }
-                if (cancelled == true)
-                {
-                    break;
-                }
-                singlecomplete = false;
-                progressbar.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(new Action(() => UpdateProgressbar(10))));
-                ThreadDelegate progressbarthread = new ThreadDelegate(Animateprogressbar);
-                progressbarthread.BeginInvoke(null, null);
-                senttotal++;
-                replyvalues = Sendicmp(addr, i);
-                singlecomplete = true;
-                if (replyvalues.Bitesize != 0)
-                {
-                    rtts.Add(Convert.ToInt16(replyvalues.Rtt));
-                }
-                try
-                {
-                    ri1rttmax = rtts.Max();
-                    ri1rttmin = rtts.Min();
-                    ri1rttaverage = Convert.ToInt16(rtts.Average());
-                }
-                catch (Exception)
-                {
-                }
-                if (cancelled != true)
-                {
-                    Outputfield.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(UpdateUserInterface));
-                    progressbar.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(new Action(() => UpdateProgressbar(0))));
-                }
-
-                if (cancelled != true) {
-                    if (i < pingtimes)
-
-                {
-                    Thread.Sleep(1000 / (Convert.ToInt16(rateping)));
-                }
-                }
-
-            }
-            progressbar.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(new Action(() => UpdateProgressbar(0))));
-            pingcomplete = true;
-            window2.LogBox2.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(new Action(() => UpdateLogBox("\n" + box1 + "\n"))));
-            Outputfield.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(UpdateUserInterfacePingComplete));
-            window2.LogBox2.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(new Action(() => UpdateLogBox("Ping complete\n"))));
-            CancelButton.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(DisableCancelButton));
-            PingButton.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(EnablePingButton));
-
-        }
-           
         private void UpdateLogBox(string inp)
         {
             window2.LogBox2.AppendText(inp);
@@ -293,212 +454,33 @@ namespace Pinger
             StatisticsBox.Text = "";
         }
 
+
         private void UpdateUserInterfacePingComplete()
         {
             Outputfield.AppendText("Ping complete\n");
             Outputfield.ScrollToEnd();
         }
 
+
         private void UpdateUserInterfacePingCancelled()
         {
             Outputfield.AppendText("cancelling...\n");
         }
 
-        string outs = "";
-        private void UpdateUserInterface()
-        {
-            
-            currentseq = senttotal;
-            Outputfield.ScrollToEnd();
-            if (lastseq != currentseq)
-                {
-                
-                if (replyvalues.Status == IPStatus.Success)
-                {
-                    if (replyvalues.Bitesize != 0)
-                        {
-                            
-                            progressbar.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(new Action(() => UpdateProgressbar(0))));
-                            Outputfield.AppendText(currentseq + " Reply from " + addr + ": bytes=" + replyvalues.Bitesize + " time=" +
-                            replyvalues.Rtt + "ms TTL=" + replyvalues.Ttl + "\n");
-                            window2.LogBox2.AppendText(currentseq + " Reply from " + addr + ": bytes=" + replyvalues.Bitesize + " time=" +
-                            replyvalues.Rtt + "ms TTL=" + replyvalues.Ttl + "\n");
-                            if (storenumber == "")
-                            {
-                                box1 = StatisticsBox.Text = "Ping statistics for " + addr + ":\n    Packets: Sent = " + senttotal + ", Received = " + receivedtotal +
-                                                         ", Lost = " + losttotal + "(" + (Convert.ToInt16(((Convert.ToDouble(losttotal) / (Convert.ToDouble(senttotal)) * 100.0)))) + "% loss),\n"
-                                                         + "Approximate rount trip times in milli-seconds:\n"
-                                                         + "    Minimum = " + ri1rttmin + "ms, Maximum = " + ri1rttmax + "ms, Average = " + ri1rttaverage + "ms\n";
-                                window2.LogBox2.ScrollToEnd();
-                            }
-                            if (storenumber != "")
-                            {
-                                box1 = StatisticsBox.Text = "Ping statistics for " + addr + "(" + storenumber + "):\n    Packets: Sent = " + senttotal + ", Received = " + receivedtotal +
-                                                         ", Lost = " + losttotal + "(" + (Convert.ToInt16(((Convert.ToDouble(losttotal) / (Convert.ToDouble(senttotal)) * 100.0)))) + "% loss),\n"
-                                                         + "Approximate rount trip times in milli-seconds:\n"
-                                                         + "    Minimum = " + ri1rttmin + "ms, Maximum = " + ri1rttmax + "ms, Average = " + ri1rttaverage + "ms\n";
-                                window2.LogBox2.ScrollToEnd();
-                            }
-                        }
-                    }
-
-                    else
-                    {
-                        if (cancelled == false)
-                        {
-                            progressbar.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(new Action(() => UpdateProgressbar(0))));
-                            switch (replyvalues.Status)
-                                
-                            {
-                                case IPStatus.TimedOut:
-                                    outs = (currentseq + " Request timed out.\n");
-                                    break;
-                                case IPStatus.BadDestination:
-                                    outs = (currentseq + " Bad destination\n");
-                                    break;
-                                case IPStatus.DestinationHostUnreachable:
-                                    outs = (currentseq + " Destination host unreachable.\n");
-                                    break;
-                                case IPStatus.DestinationNetworkUnreachable:
-                                    outs = (currentseq + " Destination network unreachable.\n");
-                                    break;
-                                case IPStatus.DestinationUnreachable:
-                                    outs = (currentseq + " Destination unreachable.\n");
-                                    break;
-                                case IPStatus.HardwareError:
-                                    outs = (currentseq + " Hardware failure.\n");
-                                    break;
-                                case IPStatus.NoResources:
-                                    outs = (currentseq + " Insufficient resources to complete request.\n");
-                                    break;
-                                case IPStatus.PacketTooBig:
-                                    outs = (currentseq + " Packet sent was too big.\n");
-                                    break;
-                                case IPStatus.ParameterProblem:
-                                    outs = (currentseq + " Parameters are invalid.\n");
-                                    break;
-                                case IPStatus.SourceQuench:
-                                    outs = (currentseq + " Reported source quench.\n");
-                                    break;
-                                case IPStatus.TimeExceeded:
-                                    outs = (currentseq + " TTL expired in transit.\n");
-                                    break;
-                                case IPStatus.TtlExpired:
-                                    outs = (currentseq + " TTL expired in transit.\n");
-                                    break;
-                                case IPStatus.TtlReassemblyTimeExceeded:
-                                    outs = (currentseq + " TTL expired in transit.\n");
-                                    break;
-                                case IPStatus.Unknown:
-                                    outs = (currentseq + " Unknown Failure.\n");
-                                    break;
-                                case IPStatus.UnrecognizedNextHeader:
-                                    outs = (currentseq + " Unrecognized next header.\n");
-                                    break;
-                                    ;
-                            };
-                            losttotal++;
-                            currentseq = lastseq;
-                            Outputfield.AppendText(outs);
-                            window2.LogBox2.AppendText(outs);
-                            window2.LogBox2.ScrollToEnd();
-                        }
-                    }
-                }
-            currentseq = lastseq;
 
 
-
-        }
-
-
-
-
-
-        private PINGREPL Sendicmp(IPAddress addresstoping, int sequenceno)
-        {
-
-            replyvalues.Rtt = 0;
-            replyvalues.Bitesize = 0;
-            Ping pingSender = new Ping();
-            PingReply reply = null;
-            try
-            {
-                reply = pingSender.Send(addresstoping, 5000, icmpdata);
-            }
-            catch (PingException)
-            {
-                replyvalues.Status = IPStatus.Unknown;
-                return replyvalues;
-            }
-            if (reply == null)
-            {
-                replyvalues.Status = IPStatus.Unknown;
-                return replyvalues;
-            }
-            if (reply.Status == IPStatus.Success)
-            {
-                if (reply.Buffer.Length != 0)
-                {
-                    replyvalues.Status = reply.Status;
-                    progressbar.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(new Action(() => UpdateProgressbar(100))));
-                    replyvalues.Rtt = (reply.RoundtripTime);
-                    try
-                    {
-                        replyvalues.Ttl = (reply.Options.Ttl);
-                    }
-                    catch (NullReferenceException)
-                    {
-                        replyvalues.Ttl = 0;
-                    }
-                    replyvalues.Bitesize = (reply.Buffer.Length);
-                    replyvalues.Seq = (sequenceno);
-                    receivedtotal++;
-                    return replyvalues;
-                }
-                else
-                {
-                    replyvalues.Status = IPStatus.Unknown;
-                    progressbar.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(new Action(() => UpdateProgressbar(100))));
-                    replyvalues.Rtt = 0;
-                    replyvalues.Ttl = 0;
-                    replyvalues.Bitesize = 0;
-                    replyvalues.Seq = (sequenceno);
-//lost total is incremented in the switch statement.
-                    return replyvalues;
-                }
-            }
-            else
-            {
-                progressbar.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(new Action(() => UpdateProgressbar(100))));
-                replyvalues.Status = reply.Status;
-                replyvalues.Rtt = 0;
-                replyvalues.Ttl = 0;
-                replyvalues.Bitesize = 0;
-                replyvalues.Seq = (sequenceno);
-                return replyvalues;
-            }
-        }
-            
-        
 
         private void UpdateProgressbar(int prog)
         {
             progressbar.Value = prog;
         }
 
-        private void Slider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            double x = rateslider.Value/10;
-            rateping = Convert.ToInt16((Math.Pow((2 / (Math.Sqrt(4 - x*2.5))), 10)));
-            if (rateping > 100)
-            {
-                rateping = 100;
-            }
-            pingratelabel.Content = "Ping Rate: " +  rateping + "/second";
-            //((Convert.ToInt16(rateslider.Value * 9)+1))
 
+        private void clearoutbox()
+        {
+            Outputfield.Text = "";
         }
+
 
 
         private void TextBox_TextChanged_1(object sender, TextChangedEventArgs e)
@@ -513,8 +495,8 @@ namespace Pinger
 
         private void ComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            string selecteditem = Convert.ToString(DeviceSelector.SelectedItem);
-            switch (selecteditem)
+
+            switch (Convert.ToString(DeviceSelector.SelectedItem))
             {
                 case "System.Windows.Controls.ComboBoxItem: Router":
                     devicetype = "dg";
@@ -531,45 +513,56 @@ namespace Pinger
             };
         }
 
+
+
+
+
         private void progressbar_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
-            
+
         }
 
-        private void Animateprogressbar()
+        private void Slider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
-            int val = 10;
-            while (val < 100)
+
+            //rateping = Convert.ToInt16((Math.Pow((1 / (Math.Sqrt(1 - ((rateslider.Value + 0.001) / 10) * 2.5))), 10)));
+            rateping = Convert.ToInt16(1 + (Math.Pow(rateslider.Value, 3)));
+            if (rateping > 1000)
             {
-                if (singlecomplete == false)
-                {
-                    if (cancelled == false)
-                    {
-                        progressbar.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(new Action(() => UpdateProgressbar(val))));
-                        Thread.Sleep(112);
-                        val=val+2;
-                    }
-                    else
-                    {
-                        break;
-                    }
-                }
-                else
-                {
-                    break;
-                }
+                rateping = 1000;
             }
+            if (rateping > 20)
+            {
+                if (meswarn == false)
+                {
+                    MessageBox.Show("Are you sure you want to ping at " + rateping + " pings/second?\nNetwork stability at the receiving site may be compromised.");
+                    meswarn = true;
+                }
+                }
+            resttime = Convert.ToInt16((1000 / rateping));
+            pingratelabel.Content = "Ping Rate: " + rateping + "/second";
         }
+
+
 
         private void ListBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
 
         }
+        protected override void OnClosed(EventArgs e)
+        {
+            base.OnClosed(e);
+
+            Application.Current.Shutdown();
+        }
+
 
         private void EnablePingButton()
         {
             PingButton.IsEnabled = true;
         }
+
+
 
         private void EnableCancelButton()
         {
@@ -581,6 +574,7 @@ namespace Pinger
             PingButton.IsEnabled = false;
         }
 
+
         private void DisableCancelButton()
         {
             CancelButton.IsEnabled = false;
@@ -588,13 +582,18 @@ namespace Pinger
 
         private void CancelButton_Click(object sender, RoutedEventArgs e)
         {
-            cancelled = true;
+            cancelrequested = true;
             CancelButton.IsEnabled = false;
             Outputfield.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(UpdateUserInterfacePingCancelled));
             progressbar.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(new Action(() => UpdateProgressbar(0))));
-            PingButton.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(EnablePingButton));
-            
         }
+
+
+        private void Button_Click_1(object sender, RoutedEventArgs e)
+        {
+            window2.Show();
+        }
+
 
         private void TextBox_TextChanged_2(object sender, TextChangedEventArgs e)
         {
@@ -613,9 +612,19 @@ namespace Pinger
             }
         }
 
-        private void Button_Click_1(object sender, RoutedEventArgs e)
-        {
-            window2.Show();
-        }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     }
 }
