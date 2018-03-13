@@ -77,6 +77,7 @@ namespace Pinger
 
         private void Button_Click(object sender, RoutedEventArgs e)
         {
+            rtts.Clear();
             PingButton.IsEnabled = false;
             pingcomplete = false;
             lastseq = 0;
@@ -102,6 +103,7 @@ namespace Pinger
             receivedtotal = 0;
             senttotal = 0;
             losttotal = 0;
+            
             for (int i = 1; i <= pingtimes; i++)
             {
                 singlecomplete = false;
@@ -117,19 +119,19 @@ namespace Pinger
                 }
                 catch (Exception e)
                 {
-                    MessageBox.Show(Convert.ToString(e));
-                    MessageBox.Show("Failed to accurately calculate averages for statistics, probably because no replies were received.");
-                    ri1rttaverage = 0;
-                    ri1rttmax = 0;
-                    ri1rttmin = 0;
-                    continue;
+                    //MessageBox.Show(Convert.ToString(e));
+                    //MessageBox.Show("Failed to accurately calculate averages for statistics, probably because no replies were received.");
+                    //ri1rttaverage = 0;
+                    //ri1rttmax = 0;
+                    //ri1rttmin = 0;
                 }
                 if (rateping < 24)
                 {
                     if (i != pingtimes)
                     {
-                        Task taskB = Task.Factory.StartNew(() => UpdateUserInterface(bitesize, ttl));
-                        taskB.Wait();
+                        UpdateUserInterface(bitesize, ttl);
+                        //Task taskB = Task.Factory.StartNew(() => UpdateUserInterface(bitesize, ttl));
+                        //taskB.Wait();
                     }
                 }
                 else
@@ -138,19 +140,30 @@ namespace Pinger
                     {
                         if (i != pingtimes)
                         {
-                            Task taskD = Task.Factory.StartNew(() => UpdateUserInterface(bitesize, ttl));
-                            taskD.Wait();
+                            UpdateUserInterface(bitesize, ttl);
+                            //Task taskD = Task.Factory.StartNew(() => UpdateUserInterface(bitesize, ttl));
+                            //taskD.Wait();
                         }
                     }
                 }
                     if (i < pingtimes)
                     {
-                        Thread.Sleep(resttime);
+                    int x = 0;
+                    while (x < 10)
+                    {
+                        if (cancelrequested == true)
+                        {
+                            break;
+                        }
+                        Thread.Sleep(resttime/10);
+                        x++;
                     }
-                if (cancelrequested == true)
-                {
-                    break;
+                    if (cancelrequested == true)
+                    {
+                        break;
+                    }
                 }
+                
 
             }
             Task taskE = Task.Factory.StartNew(() => UpdateUserInterface(bitesize, ttl));
@@ -176,23 +189,53 @@ namespace Pinger
             ttl = 0;
             seq = 0;
             PingReply reply = null;
-            
+            var tokenSource = new CancellationTokenSource();
+            var token = tokenSource.Token;
             try
             {
-                Task updatetask = Task.Factory.StartNew(() => reply = pingSender.Send(addresstoping, 5000, icmpdata));
-                updatetask.Wait();
+                int x = 0;
                 senttotal++;
+                reply = pingSender.Send(addresstoping, 2000, icmpdata);
+                Thread.Sleep(1);
+                while (x < 50)
+                {
+                    if (reply.Buffer.Length == 0)
+                    {
+                        if(cancelrequested == true)
+                        {
+                            break;
+                        }
+                        Thread.Sleep(50);
+                        x++;
+                        continue;
+                    }
+                    break;
+                }
+                //Task updatetask = Task.Factory.StartNew(() => reply = pingSender.Send(addresstoping, 5000, icmpdata));
+                //updatetask.Wait();
             }
             catch (PingException e)
             {
-                MessageBox.Show("Exception thrown while sending ping " + Convert.ToString(e));
+                //MessageBox.Show("Exception thrown while sending ping: Something went wrong at the system level, likely a physical malfunction. Exception thrown was: \n" + Convert.ToString(e));
                 status = IPStatus.Unknown;
-                return;
             }
-            status = reply.Status;
-            rtt = reply.RoundtripTime;
-            bitesize = reply.Buffer.Length;
-            rtts.Add(Convert.ToInt16(reply.RoundtripTime));
+            catch (Win32Exception e)
+            {
+                status = IPStatus.Unknown;
+                //MessageBox.Show("Exception thrown while sending ping: Something went wrong at the system level, likely a physical malfunction. Exception thrown was: \n" + Convert.ToString(e));
+            }
+            if (reply != null)
+            {
+                status = reply.Status;
+                rtt = reply.RoundtripTime;
+                bitesize = reply.Buffer.Length;
+            }
+            else
+            {
+                status = IPStatus.Unknown;
+                rtt = 0;
+                bitesize = 0;
+            }
             try
             {
                 ttl = (reply.Options.Ttl);
@@ -204,6 +247,7 @@ namespace Pinger
             }
             if (status == IPStatus.Success)
             {
+                rtts.Add(Convert.ToInt16(reply.RoundtripTime));
                 receivedtotal++;
             }
             else
@@ -322,8 +366,8 @@ namespace Pinger
                 if (cancelrequested == false)
                 {
                         progressbar.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(new Action(() => UpdateProgressbar(val))));
-                        await Task.Delay(TimeSpan.FromSeconds(0.112));
-                        val = val + 2;
+                        await Task.Delay(TimeSpan.FromSeconds(0.040));
+                        val = val + 1;
                 }
                 else
                 {
@@ -372,6 +416,8 @@ namespace Pinger
             if (addressinputvar != Convert.ToString(addr))
             {
                 storenumber = addressinputvar.PadLeft(5, '0');
+                char trim = 'S';
+                storenumber = storenumber.TrimStart(trim);
                 storenumber = devicetype + storenumber;
                 try
                 {
@@ -415,7 +461,14 @@ namespace Pinger
             {
                 numberofpings.Text = "1";
             }
-            pingtimes = Convert.ToInt32(numberofpings.Text);
+            try
+            {
+                pingtimes = Convert.ToInt32(numberofpings.Text);
+            }
+            catch (FormatException)
+            {
+                numberofpings.Text = Convert.ToString(pingtimes);
+            }
             if (pingtimes > 50000)
             {
                 pingtimes = 50000;
