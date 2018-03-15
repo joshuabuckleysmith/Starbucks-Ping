@@ -591,7 +591,7 @@ namespace Pinger
                     meswarn = true;
                 }
             }
-            pingratelabel.Content = "Ping Rate (Max): " + rateping + "/second";
+            pingratelabel.Content = "Rate (Max): " + rateping + "/second";
         }
 
 
