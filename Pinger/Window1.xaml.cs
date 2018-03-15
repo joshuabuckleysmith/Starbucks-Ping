@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Linq;
 using System.Net;
 using System.Net.NetworkInformation;
@@ -68,11 +69,15 @@ namespace Pinger
         int pingindex = 0;
         bool isValidIp;
         List<int> rtts = new List<int>();
-        int resttime = 1000;
         string outs = "";
         int val = 10;
         Ping pingSender = new Ping();
-        
+        int sleeptime = 1000;
+        int sleeptime2;
+        int threadtime;
+        int pingdelaycounter;
+
+
         bool meswarn = false;
 
         private void Button_Click(object sender, RoutedEventArgs e)
@@ -97,86 +102,72 @@ namespace Pinger
         }
 
 
+
         private void Repeaticmp()
         {
             progressbar.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(new Action(() => UpdateProgressbar(10))));
             receivedtotal = 0;
             senttotal = 0;
             losttotal = 0;
-            
+            Stopwatch stopWatch = new Stopwatch();
             for (int i = 1; i <= pingtimes; i++)
             {
+                if (cancelrequested == true)
+                {
+                    break;
+                }
+                stopWatch.Restart();
                 singlecomplete = false;
                 AnimateprogressbarAsync();
                 Task taskA = Task.Factory.StartNew(() => Sendicmp(addr));
                 taskA.Wait();
                 singlecomplete = true;
-                try
-                {
-                    ri1rttmax = rtts.Max();
-                    ri1rttmin = rtts.Min();
-                    ri1rttaverage = Convert.ToInt16(rtts.Average());
-                }
-                catch (Exception e)
-                {
-                    //MessageBox.Show(Convert.ToString(e));
-                    //MessageBox.Show("Failed to accurately calculate averages for statistics, probably because no replies were received.");
-                    //ri1rttaverage = 0;
-                    //ri1rttmax = 0;
-                    //ri1rttmin = 0;
-                }
+
                 if (rateping < 24)
                 {
                     if (i != pingtimes)
                     {
-                        UpdateUserInterface(bitesize, ttl);
-                        //Task taskB = Task.Factory.StartNew(() => UpdateUserInterface(bitesize, ttl));
-                        //taskB.Wait();
+                        UpdateUserInterface(bitesize, ttl, rtt);
                     }
                 }
-                else
+                if (rateping >= 24)
                 {
-                    if (i % (rateping/24) == 0)
+                    if (i % (rateping / 24) == 0)
                     {
                         if (i != pingtimes)
                         {
-                            UpdateUserInterface(bitesize, ttl);
-                            //Task taskD = Task.Factory.StartNew(() => UpdateUserInterface(bitesize, ttl));
-                            //taskD.Wait();
+                            UpdateUserInterface(bitesize, ttl, rtt);
                         }
                     }
                 }
-                    if (i < pingtimes)
-                    {
-                    int x = 0;
-                    while (x < 10)
-                    {
-                        if (cancelrequested == true)
-                        {
-                            break;
-                        }
-                        Thread.Sleep(resttime/10);
-                        x++;
-                    }
-                    if (cancelrequested == true)
-                    {
-                        break;
-                    }
-                }
-                
 
+                if (i < pingtimes) 
+                {
+                    threadtime = Convert.ToInt16((stopWatch.ElapsedMilliseconds));
+                    pingdelaycounter = 0;
+                    sleeptime2 = (sleeptime - threadtime);
+                        if (sleeptime2 > 0)
+                        {
+                            Thread.Sleep(sleeptime2);
+                        }
+                        pingdelaycounter++;
+                }
             }
-            Task taskE = Task.Factory.StartNew(() => UpdateUserInterface(bitesize, ttl));
-            taskE.Wait();
-            progressbar.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(new Action(() => UpdateProgressbar(0))));
-            pingcomplete = true;
-            window2.LogBox2.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(new Action(() => UpdateLogBox("\n" + box1 + "\n"))));
-            window2.LogBox2.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(window2.LogBox2.ScrollToEnd));
-            Outputfield.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(UpdateUserInterfacePingComplete));
-            window2.LogBox2.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(new Action(() => UpdateLogBox("Ping complete\n"))));
-            CancelButton.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(DisableCancelButton));
-            PingButton.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(EnablePingButton));
+                Task taskE = Task.Factory.StartNew(() => UpdateUserInterface(bitesize, ttl, rtt));
+                taskE.Wait();
+                progressbar.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(new Action(() => UpdateProgressbar(0))));
+                pingcomplete = true;
+                window2.LogBox2.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(new Action(() => UpdateLogBox("\n" + box1 + "\n"))));
+                window2.LogBox2.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(window2.LogBox2.ScrollToEnd));
+                Outputfield.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(UpdateUserInterfacePingComplete));
+                window2.LogBox2.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(new Action(() => UpdateLogBox("Ping complete\n"))));
+                CancelButton.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(DisableCancelButton));
+                PingButton.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(EnablePingButton));
+
         }
+
+
+
 
 
 
@@ -261,8 +252,17 @@ namespace Pinger
         
 
         //.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(new Action(() => )));
-        private void UpdateUserInterface(int bitesize, int ttl)
+        private void UpdateUserInterface(int bitesize, int ttl, long rtt)
         {
+            try
+            {
+                ri1rttmax = rtts.Max();
+                ri1rttmin = rtts.Min();
+                ri1rttaverage = Convert.ToInt16(rtts.Average());
+            }
+            catch (Exception e)
+            {
+            }
             Outputfield.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(Outputfield.ScrollToEnd));
             //MessageBox.Show("status in update is " + Convert.ToString(status));
             if (cancelrequested == true)
@@ -366,8 +366,8 @@ namespace Pinger
                 if (cancelrequested == false)
                 {
                         progressbar.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(new Action(() => UpdateProgressbar(val))));
-                        await Task.Delay(TimeSpan.FromSeconds(0.040));
-                        val = val + 1;
+                        await Task.Delay(TimeSpan.FromSeconds(0.08));
+                        val = val + 2;
                 }
                 else
                 {
@@ -577,12 +577,11 @@ namespace Pinger
 
         private void Slider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
-
-            //rateping = Convert.ToInt16((Math.Pow((1 / (Math.Sqrt(1 - ((rateslider.Value + 0.001) / 10) * 2.5))), 10)));
-            rateping = Convert.ToInt16(1 + (Math.Pow(rateslider.Value, 3)));
-            if (rateping > 1000)
+            rateping = Convert.ToInt16(1 + (Math.Pow(rateslider.Value, 2.5)));
+            sleeptime = ((1000 / rateping));
+            if (sleeptime < 1)
             {
-                rateping = 1000;
+                sleeptime = 0;
             }
             if (rateping > 20)
             {
@@ -591,9 +590,8 @@ namespace Pinger
                     MessageBox.Show("Are you sure you want to ping at " + rateping + " pings/second?\nNetwork stability at the receiving site may be compromised.");
                     meswarn = true;
                 }
-                }
-            resttime = Convert.ToInt16((1000 / rateping));
-            pingratelabel.Content = "Ping Rate: " + rateping + "/second";
+            }
+            pingratelabel.Content = "Ping Rate (Max): " + rateping + "/second";
         }
 
 
@@ -681,3 +679,99 @@ namespace Pinger
 
     }
 }
+
+
+
+
+/*
+ *     private void Repeaticmp()
+        {
+            progressbar.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(new Action(() => UpdateProgressbar(10))));
+            receivedtotal = 0;
+            senttotal = 0;
+            losttotal = 0;
+            Stopwatch stopWatch = new Stopwatch();
+            
+            for (int i = 1; i <= pingtimes; i++)
+            {
+                stopWatch.Restart();
+                singlecomplete = false;
+                AnimateprogressbarAsync();
+                Task taskA = Task.Factory.StartNew(() => Sendicmp(addr));
+                taskA.Wait();
+                singlecomplete = true;
+                try
+                {
+                    ri1rttmax = rtts.Max();
+                    ri1rttmin = rtts.Min();
+                    ri1rttaverage = Convert.ToInt16(rtts.Average());
+                }
+                catch (Exception e)
+                {
+                    //MessageBox.Show(Convert.ToString(e));
+                    //MessageBox.Show("Failed to accurately calculate averages for statistics, probably because no replies were received.");
+                    //ri1rttaverage = 0;
+                    //ri1rttmax = 0;
+                    //ri1rttmin = 0;
+                }
+                if (rateping < 24)
+                {
+                    if (i != pingtimes)
+                    {
+                        UpdateUserInterface(bitesize, ttl);
+                    }
+                }
+                else
+                {
+                    if (i % (rateping/24) == 0)
+                    {
+                        if (i != pingtimes)
+                        {
+                            UpdateUserInterface(bitesize, ttl);
+                        }
+                    }
+                }
+                    if (i < pingtimes)
+                    {
+                    pingdelaycounter = 0;
+                    stopWatch.Stop();
+                    sleeptime = Convert.ToInt16((resttime - stopWatch.ElapsedMilliseconds));
+                    if (cancelrequested == true)
+                    {
+                        break;
+                    }
+                    if (sleeptime < 1)
+                    {
+                        continue;
+                    }
+                    if (sleeptime > 0)
+                    {
+                        if (sleeptime <= 50)
+                        {
+                            Thread.Sleep(sleeptime);
+                            continue;
+                        }
+                    }
+                    while (pingdelaycounter < 10)
+                    {
+                        Thread.Sleep(sleeptime/10);
+                        pingdelaycounter++;
+                    }
+                    
+                }
+                
+
+            }
+            Task taskE = Task.Factory.StartNew(() => UpdateUserInterface(bitesize, ttl));
+            taskE.Wait();
+            progressbar.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(new Action(() => UpdateProgressbar(0))));
+            pingcomplete = true;
+            window2.LogBox2.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(new Action(() => UpdateLogBox("\n" + box1 + "\n"))));
+            window2.LogBox2.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(window2.LogBox2.ScrollToEnd));
+            Outputfield.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(UpdateUserInterfacePingComplete));
+            window2.LogBox2.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(new Action(() => UpdateLogBox("Ping complete\n"))));
+            CancelButton.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(DisableCancelButton));
+            PingButton.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(EnablePingButton));
+        }
+
+     */
