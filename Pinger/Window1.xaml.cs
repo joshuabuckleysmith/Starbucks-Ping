@@ -18,6 +18,7 @@ using System.Windows.Media.Imaging;
 using System.Windows.Navigation;
 using System.Windows.Shapes;
 using System.Windows.Threading;
+using System.Text.RegularExpressions;
 
 
 namespace Pinger
@@ -80,20 +81,21 @@ namespace Pinger
 
         bool meswarn = false;
 
-        private void Button_Click(object sender, RoutedEventArgs e)
+        async private void Button_Click(object sender, RoutedEventArgs e)
         {
             rtts.Clear();
             PingButton.IsEnabled = false;
             pingcomplete = false;
             lastseq = 0;
             cancelrequested = false;
+            singlecomplete = false;
             storenumber = "";
             window2.LogBox2.AppendText("\n=======" + Convert.ToString(DateTime.Now) + "=======\n");
-            progressbar.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(new Action(() => UpdateProgressbar(0))));
-            CancelButton.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(EnableCancelButton));
-            Outputfield.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(clearoutbox));
-            StatisticsBox.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(UpdateBox0));
-            ParseInput();
+            await progressbar.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(new Action(() => UpdateProgressbar(0))));
+            await CancelButton.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(EnableCancelButton));
+            await Outputfield.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(clearoutbox));
+            await StatisticsBox.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(UpdateBox0));
+            await Task.Factory.StartNew(() => ParseInput());
             ThreadDelegate pinger = new ThreadDelegate(Repeaticmp);
             pinger.BeginInvoke(null, null);
             //ThreadDelegate parser = new ThreadDelegate(ParseInput);
@@ -105,6 +107,7 @@ namespace Pinger
 
         private void Repeaticmp()
         {
+           
             progressbar.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(new Action(() => UpdateProgressbar(10))));
             receivedtotal = 0;
             senttotal = 0;
@@ -186,8 +189,15 @@ namespace Pinger
             {
                 int x = 0;
                 senttotal++;
-                reply = pingSender.Send(addresstoping, 2000, icmpdata);
-                Thread.Sleep(1);
+                try
+                {
+                    reply = pingSender.Send(addresstoping, 2000, icmpdata);
+                }
+                catch (System.ArgumentNullException)
+                {
+                    MessageBox.Show("Could not resolve hostname2");
+                }
+                    Thread.Sleep(1);
                 while (x < 50)
                 {
                     if (reply.Buffer.Length == 0)
@@ -279,7 +289,7 @@ namespace Pinger
                 {
                     StatisticsBox.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(new Action(() => box1 = StatisticsBox.Text = "Ping statistics for " + addr + ":\n    Packets: Sent = " + senttotal + ", Received = " + receivedtotal +
                                          ", Lost = " + losttotal + "(" + (Convert.ToInt16(((Convert.ToDouble(losttotal) / (Convert.ToDouble(senttotal)) * 100.0)))) + "% loss),\n"
-                                         + "Approximate rount trip times in milli-seconds:\n"
+                                         + "Approximate round trip times in milli-seconds:\n"
                                          + "    Minimum = " + ri1rttmin + "ms, Maximum = " + ri1rttmax + "ms, Average = " + ri1rttaverage + "ms\n")));
 
                     window2.LogBox2.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(window2.LogBox2.ScrollToEnd));
@@ -288,7 +298,7 @@ namespace Pinger
                 {
                     StatisticsBox.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(new Action(() => box1 = StatisticsBox.Text = "Ping statistics for " + addr + "(" + storenumber + "):\n    Packets: Sent = " + senttotal + ", Received = " + receivedtotal +
                                          ", Lost = " + losttotal + "(" + (Convert.ToInt16(((Convert.ToDouble(losttotal) / (Convert.ToDouble(senttotal)) * 100.0)))) + "% loss),\n"
-                                         + "Approximate rount trip times in milli-seconds:\n"
+                                         + "Approximate round trip times in milli-seconds:\n"
                                          + "    Minimum = " + ri1rttmin + "ms, Maximum = " + ri1rttmax + "ms, Average = " + ri1rttaverage + "ms\n")));
                     window2.LogBox2.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(window2.LogBox2.ScrollToEnd));
                 }
@@ -353,7 +363,7 @@ namespace Pinger
 
 
         
-        private async Task AnimateprogressbarAsync()
+        async void AnimateprogressbarAsync()
         {
             val = 10;
             while (val < 100)
@@ -366,7 +376,7 @@ namespace Pinger
                 if (cancelrequested == false)
                 {
                         progressbar.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(new Action(() => UpdateProgressbar(val))));
-                        await Task.Delay(TimeSpan.FromSeconds(0.08));
+                        await Task.Delay(TimeSpan.FromSeconds(0.09));
                         val = val + 2;
                 }
                 else
@@ -408,17 +418,42 @@ namespace Pinger
 
 
 
-        private void ParseInput()
+         private int ParseInput()
         {
-            Outputfield.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(ResolvingHostUpdate));
-            progressbar.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(new Action(() => UpdateProgressbar(25))));
+            string storepattern = "([0-9]+)";
+            Match storenumbermatch;
+            storenumbermatch = Regex.Match(addressinputvar, storepattern, RegexOptions.IgnoreCase | RegexOptions.Compiled, TimeSpan.FromSeconds(5));
+            //MessageBox.Show("in ws " + addressinputvar);
+            progressbar.Dispatcher.BeginInvoke(DispatcherPriority.Send, new ThreadDelegate(new Action(() => UpdateProgressbar(10))));
+            AnimateprogressbarAsync();
             isValidIp = IPAddress.TryParse(addressinputvar, out addr);
+            //MessageBox.Show("1"+storenumbermatch.Groups[0].Value);
+
+            if(devicetype != "") if (storenumbermatch.Success == false)
+            {
+                MessageBox.Show("F" + storenumbermatch.Groups[0].Value);
+                cancelrequested = true;
+                CancelButton.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(DisableCancelButton));
+                PingButton.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(EnablePingButton));
+                Outputfield.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(UpdateOutputFailed));
+                //Outputfield.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(UpdateUserInterfacePingComplete));
+                progressbar.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(new Action(() => UpdateProgressbar(0))));
+                return 1;
+            }
             if (addressinputvar != Convert.ToString(addr))
             {
-                storenumber = addressinputvar.PadLeft(5, '0');
-                char trim = 'S';
-                storenumber = storenumber.TrimStart(trim);
-                storenumber = devicetype + storenumber;
+                //MessageBox.Show("S" + storenumbermatch.Groups[0].Value);
+                if (devicetype != "")
+                    {
+                        storenumber = storenumbermatch.Groups[0].Value;
+                        storenumber = devicetype + storenumber;
+                    }
+                else
+                {
+                    storenumber = addressinputvar;
+                }
+                
+                Outputfield.Dispatcher.BeginInvoke(DispatcherPriority.Send, new ThreadDelegate(new Action(() => ResolvingHostUpdate(storenumber))));
                 try
                 {
                     hostEntry = Dns.GetHostEntry(storenumber);
@@ -429,9 +464,9 @@ namespace Pinger
                     CancelButton.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(DisableCancelButton));
                     PingButton.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(EnablePingButton));
                     Outputfield.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(UpdateOutputFailed));
-                    Outputfield.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(UpdateUserInterfacePingComplete));
+                    //Outputfield.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(UpdateUserInterfacePingComplete));
                     progressbar.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(new Action(() => UpdateProgressbar(0))));
-                    return;
+                    return 1;
                 }
                 addr = hostEntry.AddressList[0];
                 progressbar.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(new Action(() => UpdateProgressbar(50))));
@@ -442,6 +477,7 @@ namespace Pinger
             }
             progressbar.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(new Action(() => UpdateProgressbar(0))));
             Outputfield.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(clearoutbox));
+            return 1;
         }
 
 
@@ -489,9 +525,9 @@ namespace Pinger
         }
 
 
-        private void ResolvingHostUpdate()
+        private void ResolvingHostUpdate(string host)
         {
-            Outputfield.Text = "Resolving hostname...\n";
+            Outputfield.Text = "Resolving hostname ("+host+")...\n";
         }
 
 
@@ -548,21 +584,40 @@ namespace Pinger
 
         private void ComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-
+            
             switch (Convert.ToString(DeviceSelector.SelectedItem))
             {
-                case "System.Windows.Controls.ComboBoxItem: Router":
+                case "System.Windows.Controls.ComboBoxItem: Router(dg)":
                     devicetype = "dg";
                     break;
-                case "System.Windows.Controls.ComboBoxItem: Switch US":
+                case "System.Windows.Controls.ComboBoxItem: Switch US (ussw010)":
                     devicetype = "ussw010";
                     break;
-                case "System.Windows.Controls.ComboBoxItem: Workstation":
+                case "System.Windows.Controls.ComboBoxItem: Workstation(mws)":
                     devicetype = "mws";
                     break;
-                case "System.Windows.Controls.ComboBoxItem: Switch CA":
+                case "System.Windows.Controls.ComboBoxItem: Switch CA (casw010)":
                     devicetype = "casw010";
                     break;
+                case "System.Windows.Controls.ComboBoxItem: Switch US FoH(ussw030)":
+                    devicetype = "ussw030";
+                    break;
+                case "System.Windows.Controls.ComboBoxItem: Register1 US (usrg010)":
+                    devicetype = "usrg010";
+                    break;
+                case "System.Windows.Controls.ComboBoxItem: Register2 US (usrg020)":
+                    devicetype = "usrg020";
+                    break;
+                case "System.Windows.Controls.ComboBoxItem: Register3 US (usrg030)":
+                    devicetype = "usrg030";
+                    break;
+                case "System.Windows.Controls.ComboBoxItem: Register4 US (usrg040)":
+                    devicetype = "usrg040";
+                    break;
+                case "System.Windows.Controls.ComboBoxItem: Raw IP or Hostname(x.x.x.x or XX######)":
+                    devicetype = "";
+                    break;
+                    
             };
         }
 

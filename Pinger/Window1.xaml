@@ -18,7 +18,7 @@
         </Grid.RowDefinitions>
         <Button x:Name="PingButton" Content="Ping" HorizontalAlignment="Left" Margin="72,103,0,0" VerticalAlignment="Top" Width="64" Click="Button_Click" Height="33" FontSize="10" Grid.Column="1" IsDefault="True">
             <Button.Effect>
-                <DropShadowEffect BlurRadius="1" Opacity="0.1" RenderingBias="Quality" ShadowDepth="2"/>
+                <DropShadowEffect BlurRadius="1" Opacity="0.1" RenderingBias="Quality" ShadowDepth="0"/>
             </Button.Effect>
         </Button>
         <TextBox x:Name="addressin" FontSize="10" HorizontalAlignment="Left" Height="25" Margin="72,14,0,106" TextWrapping="Wrap" Text="127.0.0.1" VerticalAlignment="Center" Width="55" TextChanged="Address_TextChanged" Grid.Column="1"/>
@@ -38,18 +38,36 @@
         <TextBox x:Name="Outputfield" FontSize="10" HorizontalAlignment="Left" Height="116" Margin="106,84,0,0" TextWrapping="Wrap" VerticalAlignment="Top" Width="392" TextChanged="TextBox_TextChanged_1" FontFamily="Consolas" ScrollViewer.HorizontalScrollBarVisibility="Disabled" ScrollViewer.VerticalScrollBarVisibility="Auto" Grid.RowSpan="2" Text="Reply Results" Grid.ColumnSpan="2" />
         <TextBox x:Name="StatisticsBox" HorizontalAlignment="Left" Height="68" Margin="106,10,0,0" TextWrapping="Wrap" VerticalAlignment="Top" Width="392" TextChanged="TextBox_TextChanged" FontFamily="Consolas" FontSize="10"  ScrollViewer.VerticalScrollBarVisibility="Auto" Text="Statistics" Grid.ColumnSpan="2" />
 
-        <ComboBox x:Name="DeviceSelector" FontSize ="9" Margin="60,37,19,101" IsEditable="True"  IsReadOnly="True"  Text="Device" SelectionChanged="ComboBox_SelectionChanged" Grid.Column="1" Grid.Row="1">
+        <ComboBox x:Name="DeviceSelector" FontSize ="9" Margin="61,38,33,100" IsEditable="True"  IsReadOnly="True"  Text="Router" SelectionChanged="ComboBox_SelectionChanged" Grid.Column="1" Grid.Row="1" Grid.ColumnSpan="2">
             <ComboBoxItem>
-                <TextBlock Foreground="Black"><Run Text="Router"/></TextBlock>
+                <TextBlock Foreground="Black"><Run Text="Router(dg)"/></TextBlock>
             </ComboBoxItem>
             <ComboBoxItem>
-                <TextBlock Foreground="Black"><Run Text="Workstation"/></TextBlock>
+                <TextBlock Foreground="Black"><Run Text="Workstation(mws)"/></TextBlock>
             </ComboBoxItem>
             <ComboBoxItem>
-                <TextBlock Foreground="Red"><Run Text="Switch US"/></TextBlock>
+                <TextBlock Foreground="Red"><Run Text="Register1 US (usrg010)"/></TextBlock>
             </ComboBoxItem>
             <ComboBoxItem>
-                <TextBlock Foreground="Blue"><Run Text="Switch CA"/></TextBlock>
+                <TextBlock Foreground="Red"><Run Text="Register2 US (usrg020)"/></TextBlock>
+            </ComboBoxItem>
+            <ComboBoxItem>
+                <TextBlock Foreground="Red"><Run Text="Register3 US (usrg030)"/></TextBlock>
+            </ComboBoxItem>
+            <ComboBoxItem>
+                <TextBlock Foreground="Red"><Run Text="Register4 US (usrg040)"/></TextBlock>
+            </ComboBoxItem>
+            <ComboBoxItem>
+                <TextBlock Foreground="Red"><Run Text="Switch US (ussw010)"/></TextBlock>
+            </ComboBoxItem>
+            <ComboBoxItem>
+                <TextBlock Foreground="Red"><Run Text="Switch US FoH (ussw030)"/></TextBlock>
+            </ComboBoxItem>
+            <ComboBoxItem>
+                <TextBlock Foreground="Blue"><Run Text="Switch CA (casw010)"/></TextBlock>
+            </ComboBoxItem>
+            <ComboBoxItem>
+                <TextBlock Foreground="Blue" ToolTip="Select the device to ping, enter the store number as five digits only (eg, 12345, not dg12345) if using a prefix selected below. To manually enter a full device host name, choose Raw IP or Hostname from the list and then enter a host name in the store number field."><Run Text="Raw IP or Hostname(x.x.x.x or XX######)"/></TextBlock>
             </ComboBoxItem>
 
 
