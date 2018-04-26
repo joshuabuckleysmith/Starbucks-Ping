@@ -96,6 +96,7 @@ namespace Pinger
             await Outputfield.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(clearoutbox));
             await StatisticsBox.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(UpdateBox0));
             await Task.Factory.StartNew(() => ParseInput());
+
             ThreadDelegate pinger = new ThreadDelegate(Repeaticmp);
             pinger.BeginInvoke(null, null);
             //ThreadDelegate parser = new ThreadDelegate(ParseInput);
@@ -124,6 +125,7 @@ namespace Pinger
                 AnimateprogressbarAsync();
                 Task taskA = Task.Factory.StartNew(() => Sendicmp(addr));
                 taskA.Wait();
+                //Sendicmp(addr);
                 singlecomplete = true;
 
                 if (rateping < 24)
@@ -259,7 +261,7 @@ namespace Pinger
             //MessageBox.Show("Status after ping " + Convert.ToString(status));
             return;
         }
-        
+
 
         //.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(new Action(() => )));
         private void UpdateUserInterface(int bitesize, int ttl, long rtt)
@@ -285,7 +287,7 @@ namespace Pinger
             rtt + "ms TTL=" + ttl + "\n"))));
                 window2.LogBox2.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(new Action(() => window2.LogBox2.AppendText(senttotal + " Reply from " + addr + ": bytes=" + bitesize + " time=" +
             rtt + "ms TTL=" + ttl + "\n"))));
-            if (storenumber == "")
+                if (storenumber == "")
                 {
                     StatisticsBox.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(new Action(() => box1 = StatisticsBox.Text = "Ping statistics for " + addr + ":\n    Packets: Sent = " + senttotal + ", Received = " + receivedtotal +
                                          ", Lost = " + losttotal + "(" + (Convert.ToInt16(((Convert.ToDouble(losttotal) / (Convert.ToDouble(senttotal)) * 100.0)))) + "% loss),\n"
@@ -293,8 +295,8 @@ namespace Pinger
                                          + "    Minimum = " + ri1rttmin + "ms, Maximum = " + ri1rttmax + "ms, Average = " + ri1rttaverage + "ms\n")));
 
                     window2.LogBox2.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(window2.LogBox2.ScrollToEnd));
-            }
-            if (storenumber != "")
+                }
+                if (storenumber != "")
                 {
                     StatisticsBox.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(new Action(() => box1 = StatisticsBox.Text = "Ping statistics for " + addr + "(" + storenumber + "):\n    Packets: Sent = " + senttotal + ", Received = " + receivedtotal +
                                          ", Lost = " + losttotal + "(" + (Convert.ToInt16(((Convert.ToDouble(losttotal) / (Convert.ToDouble(senttotal)) * 100.0)))) + "% loss),\n"
@@ -356,8 +358,26 @@ namespace Pinger
                 Outputfield.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(new Action(() => Outputfield.AppendText(outs))));
                 window2.LogBox2.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(new Action(() => window2.LogBox2.AppendText(outs))));
                 window2.LogBox2.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(window2.LogBox2.ScrollToEnd));
+                if (storenumber == "")
+                {
+                    StatisticsBox.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(new Action(() => box1 = StatisticsBox.Text = "Ping statistics for " + addr + ":\n    Packets: Sent = " + senttotal + ", Received = " + receivedtotal +
+                                         ", Lost = " + losttotal + "(" + (Convert.ToInt16(((Convert.ToDouble(losttotal) / (Convert.ToDouble(senttotal)) * 100.0)))) + "% loss),\n"
+                                         + "Approximate round trip times in milli-seconds:\n"
+                                         + "    Minimum = " + ri1rttmin + "ms, Maximum = " + ri1rttmax + "ms, Average = " + ri1rttaverage + "ms\n")));
+
+                    window2.LogBox2.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(window2.LogBox2.ScrollToEnd));
+                }
+                if (storenumber != "")
+                {
+                    StatisticsBox.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(new Action(() => box1 = StatisticsBox.Text = "Ping statistics for " + addr + "(" + storenumber + "):\n    Packets: Sent = " + senttotal + ", Received = " + receivedtotal +
+                                         ", Lost = " + losttotal + "(" + (Convert.ToInt16(((Convert.ToDouble(losttotal) / (Convert.ToDouble(senttotal)) * 100.0)))) + "% loss),\n"
+                                         + "Approximate round trip times in milli-seconds:\n"
+                                         + "    Minimum = " + ri1rttmin + "ms, Maximum = " + ri1rttmax + "ms, Average = " + ri1rttaverage + "ms\n")));
+                    window2.LogBox2.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(window2.LogBox2.ScrollToEnd));
+                }
             }
         }
+        
 
 
 
@@ -376,7 +396,7 @@ namespace Pinger
                 if (cancelrequested == false)
                 {
                         progressbar.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(new Action(() => UpdateProgressbar(val))));
-                        await Task.Delay(TimeSpan.FromSeconds(0.09));
+                        await Task.Delay(TimeSpan.FromSeconds(0.15));
                         val = val + 2;
                 }
                 else
@@ -444,15 +464,16 @@ namespace Pinger
             {
                 //MessageBox.Show("S" + storenumbermatch.Groups[0].Value);
                 if (devicetype != "")
-                    {
-                        storenumber = storenumbermatch.Groups[0].Value;
-                        storenumber = devicetype + storenumber;
-                    }
+                {
+                    storenumber = storenumbermatch.Groups[0].Value;
+                    storenumber = storenumber.PadLeft(5, '0');
+                    storenumber = devicetype + storenumber;
+                }
                 else
                 {
                     storenumber = addressinputvar;
                 }
-                
+
                 Outputfield.Dispatcher.BeginInvoke(DispatcherPriority.Send, new ThreadDelegate(new Action(() => ResolvingHostUpdate(storenumber))));
                 try
                 {
@@ -461,6 +482,7 @@ namespace Pinger
                 catch (System.Net.Sockets.SocketException)
                 {
                     cancelrequested = true;
+                    Outputfield.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(new Action(() => Outputfield.AppendText("Store number " + storenumber + " could not be resolved.\n"))));
                     CancelButton.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(DisableCancelButton));
                     PingButton.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(EnablePingButton));
                     Outputfield.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(UpdateOutputFailed));
@@ -469,14 +491,24 @@ namespace Pinger
                     return 1;
                 }
                 addr = hostEntry.AddressList[0];
+
                 progressbar.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(new Action(() => UpdateProgressbar(50))));
             }
             else
             {
-                addr = IPAddress.Parse(addressinputvar);
-            }
+                try {
+                    addr = IPAddress.Parse(addressinputvar);
+                }
+                catch
+                {
+                    MessageBox.Show("IP Address was invalid and could not be used");
+                }
+                }
             progressbar.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(new Action(() => UpdateProgressbar(0))));
             Outputfield.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(clearoutbox));
+            Outputfield.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(new Action(() => Outputfield.AppendText("Sending pings to " + storenumber +"("+addr + "):\n"))));
+            window2.LogBox2.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(new Action(() => UpdateLogBox("Sending pings to " + storenumber + "(" + addr + "):\n"))));
+            window2.LogBox2.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new ThreadDelegate(window2.LogBox2.ScrollToEnd));
             return 1;
         }
 
